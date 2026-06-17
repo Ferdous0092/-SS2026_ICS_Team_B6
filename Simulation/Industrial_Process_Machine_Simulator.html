@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HART Simulator — CR-101</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:       #080C12;
+  --surf:     #0D1520;
+  --card:     #131C2A;
+  --brd:      #1A2A3F;
+  --brd2:     #243650;
+  --teal:     #00C8B4;
+  --teal-d:   rgba(0,200,180,.1);
+  --green:    #2AE89A;
+  --green-d:  rgba(42,232,154,.1);
+  --amber:    #F5A623;
+  --amber-d:  rgba(245,166,35,.1);
+  --red:      #E8445A;
+  --red-d:    rgba(232,68,90,.1);
+  --blue:     #4D9EF5;
+  --t1:       #DCE8F8;
+  --t2:       #7B90B2;
+  --t3:       #3D5475;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans', system-ui, sans-serif;
+  --r:        5px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:13px;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:9px 18px;background:var(--surf);border-bottom:1px solid var(--brd);flex-shrink:0}
+.hdr-l{display:flex;align-items:center;gap:14px}
+.logo{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--teal);letter-spacing:.15em;border:1px solid var(--teal);padding:3px 8px;border-radius:3px}
+.hdr-title{font-weight:500;font-size:14px}
+.hdr-sub{font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:1px}
+.sys{display:flex;align-items:center;gap:18px}
+.spill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--t2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s ease-in-out infinite}
+.dot.w{background:var(--amber);box-shadow:0 0 7px var(--amber)}
+.dot.f{background:var(--red);box-shadow:0 0 7px var(--red);animation:blink .5s step-end infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+#clk{font-family:var(--mono);font-size:12px;color:var(--t2);min-width:75px}
+
+/* ALARM */
+.alarm{display:none;align-items:center;gap:8px;padding:5px 16px;background:var(--red-d);border-bottom:1px solid var(--red);font-family:var(--mono);font-size:11px;color:var(--red);flex-shrink:0}
+.alarm.on{display:flex}
+.alarm-ico{animation:blink .5s step-end infinite}
+
+/* LAYOUT */
+.main{display:grid;grid-template-columns:230px 1fr 295px;flex:1;overflow:hidden}
+.panel{border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow:hidden}
+.panel:last-child{border-right:none}
+.ph{padding:7px 13px;border-bottom:1px solid var(--brd);font-family:var(--mono);font-size:9.5px;font-weight:500;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0}
+
+/* DEVICE CARDS */
+.pb{flex:1;overflow-y:auto;padding:10px}
+.dc{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:11px;margin-bottom:9px;transition:border-color .3s}
+.dc.w{border-color:var(--amber);background:color-mix(in srgb,var(--card) 94%,var(--amber) 6%)}
+.dc.f{border-color:var(--red);background:color-mix(in srgb,var(--card) 92%,var(--red) 8%)}
+.dh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.dtag{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--teal)}
+.dbadge{font-family:var(--mono);font-size:9px;font-weight:500;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.08em;background:var(--green-d);color:var(--green);border:1px solid rgba(42,232,154,.3)}
+.dbadge.w{background:var(--amber-d);color:var(--amber);border-color:rgba(245,166,35,.3)}
+.dbadge.f{background:var(--red-d);color:var(--red);border-color:rgba(232,68,90,.3)}
+.dname{font-size:10.5px;color:var(--t3);margin-bottom:8px}
+.pv-row{display:flex;align-items:baseline;gap:5px;margin-bottom:5px}
+.pv{font-family:var(--mono);font-size:24px;font-weight:300;color:var(--t1);line-height:1;min-width:68px}
+.pvunit{font-family:var(--mono);font-size:11px;color:var(--t3)}
+.bar-w{height:3px;background:var(--brd);border-radius:2px;margin-bottom:7px;overflow:hidden}
+.bar{height:100%;background:var(--teal);border-radius:2px;transition:width .5s ease}
+.dr{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-top:1px solid var(--brd);font-family:var(--mono);font-size:10px}
+.drl{color:var(--t3)}.drv{color:var(--t2)}
+.drv.hi{color:var(--teal)}.drv.f{color:var(--red)}.drv.w{color:var(--amber)}
+.mm{font-family:var(--mono);font-size:9px;color:var(--red);background:var(--red-d);border:1px solid rgba(232,68,90,.3);border-radius:3px;padding:2px 6px;margin-top:4px;display:none}
+.mm.on{display:block}
+
+/* CENTER */
+.cstack{display:flex;flex-direction:column;height:100%}
+.rsect{padding:14px 16px;border-bottom:1px solid var(--brd);display:flex;gap:16px;flex-shrink:0}
+.pid-panel{flex:1;min-width:0}
+.plabel{font-family:var(--mono);font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:9px}
+.prow{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.pkey{font-family:var(--mono);font-size:10px;color:var(--t3);width:28px;text-align:right}
+.pval{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--t1);min-width:72px}
+.pbar-w{flex:1;height:5px;background:var(--brd);border-radius:3px;overflow:hidden}
+.pbar{height:100%;border-radius:3px;transition:width .5s ease}
+.pbar.sp{background:var(--blue)}.pbar.pv{background:var(--teal)}
+.pbar.err{background:var(--amber)}.pbar.out{background:var(--green)}
+.sli-w{display:flex;align-items:center;gap:9px;margin-top:3px}
+input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:4px;background:var(--brd2);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--blue);border-radius:50%;cursor:pointer;box-shadow:0 0 8px rgba(77,158,245,.5)}
+.sli-lim{font-family:var(--mono);font-size:9px;color:var(--t3)}
+.pid-params{display:flex;gap:14px;margin-top:9px}
+.pp{display:flex;flex-direction:column;gap:2px}
+.pp-k{font-family:var(--mono);font-size:9px;color:var(--t3)}
+.pp-v{font-family:var(--mono);font-size:11px;color:var(--t2)}
+
+.chart-sect{flex:1;padding:10px 14px;min-height:0;display:flex;flex-direction:column}
+.chart-sect .ph{padding:0;border:none;margin-bottom:7px}
+.chart-wrap{flex:1;min-height:0;position:relative}
+
+/* FAULT BAR */
+.fbar{padding:9px 13px;border-top:1px solid var(--brd);background:var(--surf);display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.flabel{font-family:var(--mono);font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;flex-shrink:0}
+.fbtn{font-family:var(--mono);font-size:10.5px;padding:5px 11px;border-radius:4px;border:1px solid var(--brd2);background:var(--card);color:var(--t2);cursor:pointer;transition:all .2s;white-space:nowrap}
+.fbtn:hover{border-color:var(--red);color:var(--red)}
+.fbtn.on{background:var(--red-d);border-color:var(--red);color:var(--red);box-shadow:0 0 10px rgba(232,68,90,.2)}
+.rbtn{font-family:var(--mono);font-size:10.5px;padding:5px 11px;border-radius:4px;border:1px solid var(--brd2);background:transparent;color:var(--t3);cursor:pointer;transition:all .2s;margin-left:auto}
+.rbtn:hover{border-color:var(--teal);color:var(--teal)}
+
+/* HART LOG */
+.hlog{flex:1;overflow-y:auto;padding:7px;font-family:var(--mono);font-size:10px}
+.fe{padding:6px 8px;border-radius:4px;border:1px solid var(--brd);margin-bottom:4px;cursor:pointer;transition:border-color .15s}
+.fe:hover{border-color:var(--brd2)}
+.fe.sel{border-color:var(--teal);background:var(--teal-d)}
+.fe.ef{border-color:rgba(232,68,90,.35);background:var(--red-d)}
+.fe.wf{border-color:rgba(245,166,35,.35);background:var(--amber-d)}
+.ftop{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.ftime{color:var(--t3);font-size:9px}
+.fdir{font-size:9px;padding:1px 4px;border-radius:2px}
+.fdir.req{color:var(--blue);border:1px solid rgba(77,158,245,.3)}
+.fdir.rsp{color:var(--green);border:1px solid rgba(42,232,154,.3)}
+.fdir.err{color:var(--red);border:1px solid rgba(232,68,90,.3)}
+.fcmd{color:var(--teal);font-size:10px;font-weight:500}
+.fdesc{font-size:9px;color:var(--t2);margin-bottom:3px}
+.fhex{font-size:8.5px;color:var(--t3);word-break:break-all;line-height:1.7}
+.h-pre{color:var(--t3)}.h-stx{color:var(--amber)}.h-adr{color:var(--blue)}
+.h-cmd{color:var(--teal)}.h-cnt{color:var(--t2)}.h-sts{color:var(--amber)}
+.h-dat{color:var(--green)}.h-chk{color:var(--red)}
+.fwarn{font-size:9px;color:var(--red);margin-top:3px}
+
+/* DECODER */
+.dec{padding:9px 11px;border-top:1px solid var(--brd);flex-shrink:0;height:175px;overflow-y:auto}
+.dec-title{font-family:var(--mono);font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}
+.df{display:flex;gap:8px;align-items:flex-start;padding:2.5px 0;border-bottom:1px solid rgba(26,42,63,.5)}
+.dfo{font-family:var(--mono);font-size:8.5px;color:var(--t3);min-width:38px}
+.dfn{font-family:var(--mono);font-size:8.5px;color:var(--t2);min-width:105px}
+.dfv{font-family:var(--mono);font-size:8.5px;color:var(--teal);min-width:70px}
+.dfd{font-family:var(--sans);font-size:8.5px;color:var(--t3);flex:1}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-l">
+    <div class="logo">HART</div>
+    <div>
+      <div class="hdr-title">Chemical Reactor CR-101 — Process Control Simulator</div>
+      <div class="hdr-sub">HART Rev. 7 · Short Frame · Master/Slave · 1200 baud · Polling interval 500 ms</div>
+    </div>
+  </div>
+  <div class="sys">
+    <div class="spill"><div class="dot" id="sdot"></div><span id="stxt">RUNNING</span></div>
+    <div id="clk">00:00:00</div>
+  </div>
+</div>
+
+<div class="alarm" id="alarm"><span class="alarm-ico">⚠</span><span id="alarm-txt"></span></div>
+
+<div class="main">
+
+  <!-- LEFT: DEVICES -->
+  <div class="panel">
+    <div class="ph">Field Devices</div>
+    <div class="pb">
+
+      <!-- TT-201 -->
+      <div class="dc" id="c-tt201">
+        <div class="dh"><span class="dtag">TT-201</span><span class="dbadge" id="b-tt201">NORMAL</span></div>
+        <div class="dname">Temperature Transmitter · Addr 0x01</div>
+        <div class="pv-row"><span class="pv" id="pv-tt201">181.0</span><span class="pvunit">°C</span></div>
+        <div class="bar-w"><div class="bar" id="bar-tt201" style="width:51%"></div></div>
+        <div class="mm" id="mm-tt201">⚡ ANALOG / DIGITAL MISMATCH</div>
+        <div class="dr"><span class="drl">4–20 mA</span><span class="drv" id="ma-tt201">12.18 mA</span></div>
+        <div class="dr"><span class="drl">HART CMD3</span><span class="drv hi" id="hv-tt201">181.0 °C</span></div>
+        <div class="dr"><span class="drl">Dev Status</span><span class="drv" id="st-tt201">0x00</span></div>
+        <div class="dr"><span class="drl">Range</span><span class="drv">140–220 °C</span></div>
+      </div>
+
+      <!-- FT-202 -->
+      <div class="dc" id="c-ft202">
+        <div class="dh"><span class="dtag">FT-202</span><span class="dbadge" id="b-ft202">NORMAL</span></div>
+        <div class="dname">Flow Transmitter · Addr 0x02</div>
+        <div class="pv-row"><span class="pv" id="pv-ft202">2.500</span><span class="pvunit">m³/h</span></div>
+        <div class="bar-w"><div class="bar" id="bar-ft202" style="width:50%"></div></div>
+        <div class="dr"><span class="drl">4–20 mA</span><span class="drv" id="ma-ft202">12.00 mA</span></div>
+        <div class="dr"><span class="drl">HART CMD1</span><span class="drv hi" id="hv-ft202">2.500 m³/h</span></div>
+        <div class="dr"><span class="drl">Dev Status</span><span class="drv" id="st-ft202">0x00</span></div>
+        <div class="dr"><span class="drl">Range</span><span class="drv">0–5 m³/h</span></div>
+      </div>
+
+      <!-- FCV-203 -->
+      <div class="dc" id="c-fcv203">
+        <div class="dh"><span class="dtag">FCV-203</span><span class="dbadge" id="b-fcv203">NORMAL</span></div>
+        <div class="dname">Smart Valve Positioner · Addr 0x03</div>
+        <div class="pv-row"><span class="pv" id="pv-fcv203">52.0</span><span class="pvunit">%</span></div>
+        <div class="bar-w"><div class="bar" id="bar-fcv203" style="width:52%"></div></div>
+        <div class="dr"><span class="drl">Commanded</span><span class="drv" id="cmd-fcv203">52.0 %</span></div>
+        <div class="dr"><span class="drl">Actual Pos</span><span class="drv hi" id="act-fcv203">52.0 %</span></div>
+        <div class="dr"><span class="drl">Pos Error</span><span class="drv" id="perr-fcv203">0.0 %</span></div>
+        <div class="dr"><span class="drl">CMD48 Stat</span><span class="drv" id="st-fcv203">0x00 0x00</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="panel">
+    <div class="cstack">
+
+      <!-- P&ID + PID -->
+      <div class="rsect">
+        <!-- Reactor SVG -->
+        <svg width="175" height="210" viewBox="0 0 175 210" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+          <defs>
+            <style>
+              .pipe{stroke:#243650;stroke-width:5;fill:none;stroke-linecap:round}
+              .flow{stroke:#00C8B4;stroke-width:2.5;fill:none;stroke-dasharray:5 7;stroke-linecap:round}
+              .faulted{stroke:#E8445A}
+              .lbl{font:9px 'IBM Plex Mono',monospace;fill:#3D5475;text-anchor:middle}
+              .dlbl{font:10px 'IBM Plex Mono',monospace;font-weight:600;fill:#00C8B4;text-anchor:middle}
+              .devbox{fill:#131C2A;stroke:#243650;stroke-width:1}
+            </style>
+            <marker id="a" markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="auto">
+              <path d="M0,0 L5,2.5 L0,5Z" fill="#243650"/>
+            </marker>
+          </defs>
+
+          <!-- Feed label -->
+          <text class="lbl" x="87" y="12">Feed In</text>
+          <!-- Inlet pipe -->
+          <line class="pipe" x1="87" y1="14" x2="87" y2="42"/>
+          <line class="flow" x1="87" y1="14" x2="87" y2="40" id="f-inlet">
+            <animate attributeName="stroke-dashoffset" values="24;0" dur="1.4s" repeatCount="indefinite"/>
+          </line>
+
+          <!-- FT-202 box -->
+          <rect x="57" y="42" width="60" height="26" rx="3" class="devbox" id="box-ft202"/>
+          <text class="dlbl" x="87" y="57">FT-202</text>
+          <text class="lbl" x="87" y="67">FLOW</text>
+
+          <!-- Mid pipe -->
+          <line class="pipe" x1="87" y1="68" x2="87" y2="98"/>
+          <line class="flow" x1="87" y1="70" x2="87" y2="96" id="f-mid">
+            <animate attributeName="stroke-dashoffset" values="24;0" dur="1.4s" repeatCount="indefinite"/>
+          </line>
+
+          <!-- FCV-203 valve diamond -->
+          <polygon points="87,98 106,114 87,130 68,114" class="devbox" id="box-fcv203"/>
+          <text class="dlbl" x="87" y="117">FCV</text>
+          <text class="lbl" x="87" y="127">203</text>
+
+          <!-- Lower pipe -->
+          <line class="pipe" x1="87" y1="130" x2="87" y2="152"/>
+          <line class="flow" x1="87" y1="132" x2="87" y2="150" id="f-lower">
+            <animate attributeName="stroke-dashoffset" values="24;0" dur="1.4s" repeatCount="indefinite"/>
+          </line>
+
+          <!-- Reactor vessel -->
+          <rect x="40" y="152" width="95" height="45" rx="4" fill="#131C2A" stroke="#1A2A3F" stroke-width="1.5"/>
+          <path d="M40,197 Q40,213 87,213 Q134,213 134,197" fill="#0D1520" stroke="#1A2A3F" stroke-width="1.5"/>
+          <text class="dlbl" x="87" y="173">CR-101</text>
+          <text class="lbl" x="87" y="187">REACTOR</text>
+
+          <!-- TT-201 stem -->
+          <line stroke="#243650" stroke-width="1.5" x1="135" y1="166" x2="156" y2="166"/>
+          <rect x="149" y="155" width="24" height="22" rx="3" class="devbox" id="box-tt201"/>
+          <text class="dlbl" x="161" y="167">TT</text>
+          <text class="lbl" x="161" y="175">201</text>
+          <!-- Temperature dot -->
+          <circle cx="135" cy="166" r="4" fill="#00C8B4" id="tdot">
+            <animate attributeName="opacity" values=".5;1;.5" dur="2s" repeatCount="indefinite"/>
+          </circle>
+
+          <!-- Product out label -->
+          <text class="lbl" x="87" y="210" style="font-size:8px">Product Out ↓</text>
+        </svg>
+
+        <!-- PID Controller -->
+        <div class="pid-panel">
+          <div class="plabel">PID Controller · DCS</div>
+          <div class="prow">
+            <span class="pkey">SP</span>
+            <span class="pval" id="p-sp">185.0 °C</span>
+            <div class="pbar-w"><div class="pbar sp" id="pb-sp" style="width:50%"></div></div>
+          </div>
+          <div class="prow">
+            <span class="pkey">PV</span>
+            <span class="pval" id="p-pv">181.0 °C</span>
+            <div class="pbar-w"><div class="pbar pv" id="pb-pv" style="width:42%"></div></div>
+          </div>
+          <div class="prow">
+            <span class="pkey">ERR</span>
+            <span class="pval" id="p-err">+4.0 °C</span>
+            <div class="pbar-w"><div class="pbar err" id="pb-err" style="width:20%"></div></div>
+          </div>
+          <div class="prow">
+            <span class="pkey">OUT</span>
+            <span class="pval" id="p-out">52.0 %</span>
+            <div class="pbar-w"><div class="pbar out" id="pb-out" style="width:52%"></div></div>
+          </div>
+          <div class="plabel" style="margin-top:12px">Setpoint (°C)</div>
+          <div class="sli-w">
+            <span class="sli-lim">160</span>
+            <input type="range" id="sp-sli" min="160" max="210" value="185" step="0.5">
+            <span class="sli-lim">210</span>
+          </div>
+          <div class="pid-params">
+            <div class="pp"><span class="pp-k">Kp</span><span class="pp-v">0.800</span></div>
+            <div class="pp"><span class="pp-k">Ki</span><span class="pp-v">0.050</span></div>
+            <div class="pp"><span class="pp-k">Kd</span><span class="pp-v">0.100</span></div>
+            <div class="pp"><span class="pp-k">dt</span><span class="pp-v">0.5 s</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trend Chart -->
+      <div class="chart-sect">
+        <div class="ph">Temperature Trend — Last 60 s</div>
+        <div class="chart-wrap">
+          <canvas id="tc"></canvas>
+        </div>
+      </div>
+
+      <!-- Fault Bar -->
+      <div class="fbar">
+        <span class="flabel">Fault:</span>
+        <button class="fbtn" id="btn-tt201" onclick="tog('tt201')">⚡ TT-201 Sensor Drift</button>
+        <button class="fbtn" id="btn-ft202" onclick="tog('ft202')">⚡ FT-202 Loop Failure</button>
+        <button class="fbtn" id="btn-fcv203" onclick="tog('fcv203')">⚡ FCV-203 Valve Stuck</button>
+        <button class="rbtn" onclick="resetAll()">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: HART LOG -->
+  <div class="panel">
+    <div class="ph">HART Frame Log <span id="frame-count" style="margin-left:8px;color:var(--t3)"></span></div>
+    <div class="hlog" id="hlog"></div>
+    <div class="dec" id="dec">
+      <div class="dec-title">Frame Decoder</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--t3);text-align:center;padding-top:16px">
+        Click any frame to inspect bytes
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────
+const S = {
+  sp: 185, pv: 181,
+  pid: { integral: 0, prevErr: 0 },
+  faults: { tt201: false, ft202: false, fcv203: false },
+  tt201: { hartPv: 181, drift: 0, ma: 12.18, status: 0 },
+  ft202: { pv: 2.5, ma: 12, status: 0 },
+  fcv203: { cmd: 52, act: 52, err: 0, status: 0 },
+  history: { labels: [], pv: [], sp: [] },
+  frames: [], sel: -1, tick: 0,
+  t0: Date.now(), fcnt: 0
+};
+
+// PID constants (match paper)
+const Kp=0.8, Ki=0.05, Kd=0.1, DT=0.5;
+// Process model: T_ss = 160 + 0.5*valvePos, tau=20s
+const T_BASE=160, K_PROC=0.5, TAU=20;
+
+// ── CHART ─────────────────────────────────────────────────────────
+const tctx = document.getElementById('tc').getContext('2d');
+const chart = new Chart(tctx, {
+  type:'line',
+  data:{
+    labels:[],
+    datasets:[
+      {label:'PV (°C)',data:[],borderColor:'#00C8B4',borderWidth:1.5,pointRadius:0,tension:.3,fill:false},
+      {label:'SP (°C)',data:[],borderColor:'#4D9EF5',borderWidth:1,pointRadius:0,borderDash:[4,4],tension:0,fill:false}
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{
+      legend:{display:true,labels:{color:'#7B90B2',font:{family:'IBM Plex Mono',size:9},boxWidth:14,padding:8}},
+      tooltip:{enabled:false}
+    },
+    scales:{
+      x:{grid:{color:'#1A2A3F'},ticks:{color:'#3D5475',font:{family:'IBM Plex Mono',size:9},maxTicksLimit:6,maxRotation:0}},
+      y:{min:150,max:220,grid:{color:'#1A2A3F'},ticks:{color:'#3D5475',font:{family:'IBM Plex Mono',size:9},callback:v=>v+'°'}}
+    }
+  }
+});
+
+// ── HART FRAME HELPERS ────────────────────────────────────────────
+function flt(v){ const b=new ArrayBuffer(4); new DataView(b).setFloat32(0,v,false); return [...new Uint8Array(b)]; }
+function hex(b){ return b.toString(16).toUpperCase().padStart(2,'0'); }
+function hexArr(a){ return a.map(hex).join(' '); }
+function xor(a){ return a.reduce((x,y)=>x^y,0); }
+function el(){ return ((Date.now()-S.t0)/1000).toFixed(1); }
+
+function buildReq(addr, cmd, data=[]){
+  const core=[0x02, addr&0x7F, cmd, data.length, ...data];
+  return [0xFF,0xFF,0xFF,0xFF,0xFF, ...core, xor(core)];
+}
+function buildRsp(addr, cmd, stat1, stat2, data=[]){
+  const core=[0x06, addr|0x80, cmd, 2+data.length, stat1, stat2, ...data];
+  return [0xFF,0xFF,0xFF,0xFF,0xFF, ...core, xor(core)];
+}
+
+// ── FRAME LOG ─────────────────────────────────────────────────────
+function pushFrame(dir, device, cmd, desc, bytes, cls='', warn=''){
+  const t=el();
+  S.frames.unshift({dir,device,cmd,desc,bytes,cls,warn,t});
+  if(S.frames.length>80) S.frames.pop();
+  S.fcnt++;
+  document.getElementById('frame-count').textContent=`(${S.frames.length})`;
+  renderLog();
+}
+
+function colorHex(bytes, dir){
+  if(!bytes) return '<span style="color:#E8445A">─ no response ─</span>';
+  let i=0, h='';
+  h+=`<span class="h-pre" title="Preamble">${hexArr(bytes.slice(0,5))}</span>`;
+  i=5;
+  h+=` <span class="h-stx" title="Start byte (${dir==='RSP'?'ACK 0x06':'STX 0x02'})">${hex(bytes[i++])}</span>`;
+  h+=` <span class="h-adr" title="Address">${hex(bytes[i++])}</span>`;
+  h+=` <span class="h-cmd" title="Command">${hex(bytes[i++])}</span>`;
+  const cnt=bytes[i];
+  h+=` <span class="h-cnt" title="Byte count: ${cnt}">${hex(bytes[i++])}</span>`;
+  if(dir==='RSP' && cnt>=2){
+    h+=` <span class="h-sts" title="Status bytes">${hex(bytes[i++])} ${hex(bytes[i++])}</span>`;
+    const rem=cnt-2;
+    if(rem>0){ h+=` <span class="h-dat" title="Data (${rem}B)">${hexArr(bytes.slice(i,i+rem))}</span>`; i+=rem; }
+  } else if(cnt>0){
+    h+=` <span class="h-dat" title="Data">${hexArr(bytes.slice(i,i+cnt))}</span>`; i+=cnt;
+  }
+  if(i<bytes.length) h+=` <span class="h-chk" title="XOR checksum">${hex(bytes[i])}</span>`;
+  return h;
+}
+
+function renderLog(){
+  const log=document.getElementById('hlog');
+  log.innerHTML=S.frames.map((f,i)=>{
+    const sel=S.sel===i?' sel':'';
+    const cc=f.cls?` ${f.cls}`:'';
+    const dirC=f.dir==='REQ'?'req':f.dir==='RSP'?'rsp':'err';
+    const warnH=f.warn?`<div class="fwarn">⚡ ${f.warn}</div>`:'';
+    return `<div class="fe${cc}${sel}" onclick="selFrame(${i})">
+      <div class="ftop">
+        <span class="ftime">${f.t}s</span>
+        <span class="fdir ${dirC}">${f.dir}</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">${f.device}</span>
+        <span style="flex:1"></span>
+        <span class="fcmd">CMD ${f.cmd}</span>
+      </div>
+      <div class="fdesc">${f.desc}</div>
+      <div class="fhex">${colorHex(f.bytes,f.dir)}</div>
+      ${warnH}
+    </div>`;
+  }).join('');
+}
+
+function selFrame(idx){
+  S.sel=idx;
+  renderLog();
+  decodeFrame(S.frames[idx]);
+}
+
+function decodeFrame(f){
+  const dec=document.getElementById('dec');
+  if(!f){ dec.innerHTML='<div class="dec-title">Frame Decoder</div>'; return; }
+  if(!f.bytes){
+    dec.innerHTML=`<div class="dec-title">Frame Decoder — ${f.device} CMD ${f.cmd}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-top:10px">
+        COMM ERROR: No response — loop current loss or wiring fault
+      </div>`; return;
+  }
+  const rows=[];
+  const b=f.bytes; let i=5;
+  rows.push(['[0–4]','PREAMBLE',hexArr(b.slice(0,5)),'5× 0xFF sync — marks start of HART frame']);
+  rows.push(['[5]',f.dir==='RSP'?'ACK':'STX',hex(b[i++]),f.dir==='RSP'?'0x06: Slave→Master short frame':'0x02: Master→Slave short frame']);
+  rows.push(['[6]','ADDRESS',hex(b[i++]),`Device 0x0${f.addr} ${f.dir==='RSP'?'| 0x80 (response)':'(polling)'}`]);
+  rows.push(['[7]','COMMAND',hex(b[i++]),cmdName(f.cmd)]);
+  const cnt=b[i];
+  rows.push(['[8]','BYTE COUNT',hex(b[i++]),`${cnt} byte${cnt!==1?'s':''} follow in payload`]);
+  if(f.dir==='RSP'){
+    rows.push(['[9]','COMM STATUS',hex(b[i]),decCom(b[i++])]);
+    rows.push(['[10]','DEV STATUS',hex(b[i]),decDev(b[i++])]);
+    if(f.cmd===3 && i+4<=b.length-1){
+      const pv=new DataView(new Uint8Array(b.slice(i,i+4)).buffer).getFloat32(0,false);
+      rows.push([`[11–14]`,'PV (Float32)',hexArr(b.slice(i,i+4)),`${pv.toFixed(2)} °C (IEEE 754 big-endian)`]); i+=4;
+    }
+    if(f.cmd===3 && i+4<=b.length-1){
+      const ma=new DataView(new Uint8Array(b.slice(i,i+4)).buffer).getFloat32(0,false);
+      rows.push([`[15–18]`,'LOOP CURRENT',hexArr(b.slice(i,i+4)),`${ma.toFixed(3)} mA (4–20 mA span)`]); i+=4;
+    }
+    if(f.cmd===48 && i+4<=b.length-1){
+      const cp=new DataView(new Uint8Array(b.slice(i,i+4)).buffer).getFloat32(0,false);
+      rows.push([`[11–14]`,'CMD POSITION',hexArr(b.slice(i,i+4)),`${cp.toFixed(1)} % (setpoint from DCS)`]); i+=4;
+    }
+    if(f.cmd===48 && i+4<=b.length-1){
+      const ap=new DataView(new Uint8Array(b.slice(i,i+4)).buffer).getFloat32(0,false);
+      rows.push([`[15–18]`,'ACTUAL POS',hexArr(b.slice(i,i+4)),`${ap.toFixed(1)} % (encoder feedback)`]); i+=4;
+    }
+    if(f.cmd===48 && i+4<=b.length-1){
+      const pe=new DataView(new Uint8Array(b.slice(i,i+4)).buffer).getFloat32(0,false);
+      rows.push([`[19–22]`,'POS ERROR',hexArr(b.slice(i,i+4)),`${pe.toFixed(2)} % deviation — ${pe>5?'⚡ ALARM (>5%)':'✓ within tolerance'}`]); i+=4;
+    }
+  }
+  rows.push([`[${b.length-1}]`,'CHECKSUM',hex(b[b.length-1]),'XOR of all bytes [5..N−1] for error detection']);
+  dec.innerHTML=`<div class="dec-title">Decoder — ${f.device} CMD ${f.cmd} (${f.dir}) @ ${f.t}s</div>`
+    +rows.map(r=>`<div class="df"><span class="dfo">${r[0]}</span><span class="dfn">${r[1]}</span><span class="dfv">${r[2]}</span><span class="dfd">${r[3]}</span></div>`).join('');
+}
+
+function cmdName(c){ return({0:'Read Unique Identifier',1:'Read PV',2:'Read Loop Current & %',3:'Read Dynamic Variables & Current',48:'Read Additional Device Status'}[c]||`Command ${c}`); }
+function decCom(b){ if(!b) return 'No comm errors'; const f=[]; if(b&0x80)f.push('Parity error'); if(b&0x40)f.push('Overrun'); if(b&0x20)f.push('Frame error'); if(b&0x08)f.push('Checksum mismatch'); return f.join(', ')||hex(b); }
+function decDev(b){ if(!b) return 'Device OK'; const f=[]; if(b&0x08)f.push('PV out of range'); if(b&0x04)f.push('Analog/digital mismatch'); if(b&0x10)f.push('Position deviation alarm'); return f.join(', ')||hex(b); }
+
+// ── HART FRAME GENERATION ─────────────────────────────────────────
+function genFrames(){
+  const dev=S.tick%3;
+  if(dev===0) genTT201();
+  else if(dev===1) genFT202();
+  else genFCV203();
+}
+
+function genTT201(){
+  const addr=0x01;
+  pushFrame('REQ','TT-201',3,'CMD 3 — Read Dynamic Variables',buildReq(addr,3));
+  const hartPv=S.tt201.hartPv;
+  const ma=S.tt201.ma;
+  const s1=S.faults.tt201?0x08:0x00;  // PV out of range
+  const s2=S.faults.tt201?0x04:0x00;  // analog/digital mismatch
+  const data=[...flt(hartPv),...flt(ma),...flt(((hartPv-140)/80)*100)];
+  const bytes=buildRsp(addr,3,s1,s2,data);
+  const cls=S.faults.tt201?'wf':'';
+  const warn=S.faults.tt201&&S.tt201.drift>2?`Analog/Digital mismatch — drift +${S.tt201.drift.toFixed(1)}°C (0x04)`:'' ;
+  const f={...S.frames[0], addr};  // for decoder
+  pushFrame('RSP','TT-201',3,`PV: ${hartPv.toFixed(2)} °C · I: ${ma.toFixed(3)} mA · Stat: ${hex(s1)} ${hex(s2)}`,bytes,cls,warn);
+  S.frames[0].addr=addr;
+}
+
+function genFT202(){
+  const addr=0x02;
+  pushFrame('REQ','FT-202',1,'CMD 1 — Read Primary Variable',buildReq(addr,1));
+  S.frames[0].addr=addr;
+  if(S.faults.ft202){
+    pushFrame('ERR','FT-202',1,'TIMEOUT — No response (loop current: 3.5 mA)',null,'ef','Loop current <3.6 mA — open circuit or power loss');
+    S.frames[0].addr=addr;
+    return;
+  }
+  const data=flt(S.ft202.pv);
+  const bytes=buildRsp(addr,1,0x00,0x00,data);
+  pushFrame('RSP','FT-202',1,`PV: ${S.ft202.pv.toFixed(3)} m³/h · I: ${S.ft202.ma.toFixed(3)} mA`,bytes,'','');
+  S.frames[0].addr=addr;
+}
+
+function genFCV203(){
+  const addr=0x03;
+  pushFrame('REQ','FCV-203',48,'CMD 48 — Read Additional Device Status',buildReq(addr,48));
+  S.frames[0].addr=addr;
+  const pe=Math.abs(S.fcv203.cmd-S.fcv203.act);
+  const s1=pe>5?0x04:0x00;   // position deviation
+  const s2=pe>5?0x10:0x00;   // position alarm bit
+  const data=[...flt(S.fcv203.cmd),...flt(S.fcv203.act),...flt(pe),0x00,0x00,0x00,0x00];
+  const bytes=buildRsp(addr,48,s1,s2,data);
+  const cls=S.faults.fcv203?'ef':'';
+  const warn=S.faults.fcv203?`Valve stuck — pos error ${pe.toFixed(1)}% > 5% threshold (0x04|0x10)`:'';
+  pushFrame('RSP','FCV-203',48,`Cmd: ${S.fcv203.cmd.toFixed(1)}% · Act: ${S.fcv203.act.toFixed(1)}% · Err: ${pe.toFixed(2)}%`,bytes,cls,warn);
+  S.frames[0].addr=addr;
+}
+
+// ── SIMULATION STEP ───────────────────────────────────────────────
+function step(){
+  S.tick++;
+
+  // PID sees HART-reported temperature
+  const measured = S.faults.tt201 ? S.tt201.hartPv : S.pv;
+  const err = S.sp - measured;
+  S.pid.integral = Math.max(-120, Math.min(120, S.pid.integral + err * DT));
+  const der = (err - S.pid.prevErr) / DT;
+  S.pid.prevErr = err;
+
+  let valveCmd = 50 + Kp*err + Ki*S.pid.integral + Kd*der;
+  valveCmd = Math.max(0, Math.min(100, valveCmd));
+
+  // FCV-203
+  S.fcv203.cmd = valveCmd;
+  S.fcv203.act = S.faults.fcv203
+    ? 35 + (Math.random()-.5)*.25   // stuck near 35%
+    : valveCmd + (Math.random()-.5)*.3;
+  S.fcv203.err = Math.abs(S.fcv203.cmd - S.fcv203.act);
+
+  // Process temperature
+  const T_ss = T_BASE + K_PROC * S.fcv203.act;
+  S.pv += (DT/TAU) * (T_ss - S.pv) + (Math.random()-.5)*.07;
+
+  // TT-201
+  if(S.faults.tt201){
+    S.tt201.drift = Math.min(S.tt201.drift + .12*DT, 28);
+    S.tt201.hartPv = S.pv + S.tt201.drift;
+    S.tt201.status = 0x0C;  // 0x08|0x04
+  } else {
+    S.tt201.drift = Math.max(0, S.tt201.drift - 1.5);
+    S.tt201.hartPv = S.pv;
+    S.tt201.status = 0x00;
+  }
+  S.tt201.ma = 4 + Math.max(0, Math.min(16, (S.pv-140)/80*16));
+
+  // FT-202
+  if(S.faults.ft202){
+    S.ft202.pv = 0;
+    S.ft202.ma = 3.5 + (Math.random()-.5)*.1;
+    S.ft202.status = 0x80;
+  } else {
+    S.ft202.pv = Math.max(.3, 1 + (S.fcv203.act/100)*3 + (Math.random()-.5)*.06);
+    S.ft202.ma = 4 + (S.ft202.pv/5)*16;
+    S.ft202.status = 0x00;
+  }
+
+  updateUI();
+  updateChart();
+  genFrames();
+}
+
+// ── UI UPDATE ─────────────────────────────────────────────────────
+function updateUI(){
+  // TT-201
+  const tt_pct = Math.max(0,Math.min(100,(S.pv-140)/80*100));
+  document.getElementById('pv-tt201').textContent = S.pv.toFixed(1);
+  document.getElementById('bar-tt201').style.width = tt_pct.toFixed(1)+'%';
+  document.getElementById('ma-tt201').textContent = S.tt201.ma.toFixed(3)+' mA';
+  document.getElementById('hv-tt201').textContent = S.tt201.hartPv.toFixed(2)+' °C';
+  document.getElementById('st-tt201').textContent = '0x'+hex(S.tt201.status);
+  const mismatch = S.faults.tt201 && S.tt201.drift>1.5;
+  document.getElementById('mm-tt201').classList.toggle('on', mismatch);
+  setCard('tt201', S.faults.tt201?'w':'', S.faults.tt201?'DRIFT':'NORMAL', S.faults.tt201?'w':'', 'hv-tt201');
+
+  // FT-202
+  const ft_pct = Math.max(0,Math.min(100,S.ft202.pv/5*100));
+  document.getElementById('pv-ft202').textContent = S.faults.ft202?'---':S.ft202.pv.toFixed(3);
+  document.getElementById('bar-ft202').style.width = ft_pct.toFixed(1)+'%';
+  document.getElementById('ma-ft202').textContent = S.ft202.ma.toFixed(3)+' mA';
+  document.getElementById('hv-ft202').textContent = S.faults.ft202?'TIMEOUT':S.ft202.pv.toFixed(3)+' m³/h';
+  document.getElementById('st-ft202').textContent = '0x'+hex(S.ft202.status);
+  setCard('ft202', S.faults.ft202?'f':'', S.faults.ft202?'TIMEOUT':'NORMAL', S.faults.ft202?'f':'', 'hv-ft202');
+
+  // FCV-203
+  document.getElementById('pv-fcv203').textContent = S.fcv203.act.toFixed(1);
+  document.getElementById('bar-fcv203').style.width = S.fcv203.act.toFixed(1)+'%';
+  document.getElementById('cmd-fcv203').textContent = S.fcv203.cmd.toFixed(1)+' %';
+  document.getElementById('act-fcv203').textContent = S.fcv203.act.toFixed(1)+' %';
+  document.getElementById('perr-fcv203').textContent = S.fcv203.err.toFixed(1)+' %';
+  const s1 = S.fcv203.err>5?0x04:0x00, s2 = S.fcv203.err>5?0x10:0x00;
+  document.getElementById('st-fcv203').textContent = `0x${hex(s1)} 0x${hex(s2)}`;
+  const stuck = S.faults.fcv203;
+  setCard('fcv203', stuck?'f':'', stuck?'STUCK':'NORMAL', stuck?'f':'', 'act-fcv203');
+  document.getElementById('perr-fcv203').className = 'drv'+(stuck?' f':'');
+
+  // PID panel
+  const spPct = (S.sp-160)/50*100;
+  const pvPct = Math.max(0,(S.pv-160)/50*100);
+  const errPct = Math.min(100, Math.abs(S.sp-S.pv)/20*100);
+  document.getElementById('p-sp').textContent = S.sp.toFixed(1)+' °C';
+  document.getElementById('p-pv').textContent = S.pv.toFixed(1)+' °C';
+  document.getElementById('p-err').textContent = (S.sp-S.pv>=0?'+':'')+(S.sp-S.pv).toFixed(1)+' °C';
+  document.getElementById('p-out').textContent = S.fcv203.cmd.toFixed(1)+' %';
+  document.getElementById('pb-sp').style.width = spPct.toFixed(1)+'%';
+  document.getElementById('pb-pv').style.width = pvPct.toFixed(1)+'%';
+  document.getElementById('pb-err').style.width = errPct.toFixed(1)+'%';
+  document.getElementById('pb-out').style.width = S.fcv203.cmd.toFixed(1)+'%';
+
+  // System status dot
+  const sdot=document.getElementById('sdot'), stxt=document.getElementById('stxt');
+  if(S.faults.ft202||S.faults.fcv203){ sdot.className='dot f'; stxt.textContent='FAULT'; }
+  else if(S.faults.tt201){ sdot.className='dot w'; stxt.textContent='WARNING'; }
+  else { sdot.className='dot'; stxt.textContent='RUNNING'; }
+
+  // Alarm banner
+  const alarms=[];
+  if(S.faults.tt201&&S.tt201.drift>1) alarms.push(`TT-201 drift +${S.tt201.drift.toFixed(1)}°C`);
+  if(S.faults.ft202) alarms.push('FT-202 HART timeout — loop open');
+  if(S.faults.fcv203) alarms.push(`FCV-203 stuck ${S.fcv203.act.toFixed(0)}% (cmd ${S.fcv203.cmd.toFixed(0)}%)`);
+  const alarmEl=document.getElementById('alarm');
+  alarmEl.classList.toggle('on',alarms.length>0);
+  document.getElementById('alarm-txt').textContent=alarms.join('  ·  ');
+
+  // SVG device highlights
+  const tt_c=S.faults.tt201?'#F5A623':'#00C8B4';
+  const ft_c=S.faults.ft202?'#E8445A':'#00C8B4';
+  const fv_c=S.faults.fcv203?'#E8445A':'#00C8B4';
+  setSVGStroke('box-tt201',tt_c); setSVGStroke('box-ft202',ft_c); setSVGStroke('box-fcv203',fv_c);
+  const td=document.getElementById('tdot'); if(td) td.style.fill=tt_c;
+
+  // Flow animation opacity
+  const fop=S.faults.ft202?'.2':'1';
+  ['f-inlet','f-mid'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.opacity=fop; });
+  const lop=(S.faults.ft202||S.fcv203.act<2)?'.2':'1';
+  const le=document.getElementById('f-lower'); if(le) le.style.opacity=lop;
+}
+
+function setCard(dev, cardCls, badgeTxt, badgeCls, hvId){
+  document.getElementById('c-'+dev).className='dc'+(cardCls?' '+cardCls:'');
+  const badge=document.getElementById('b-'+dev);
+  badge.className='dbadge'+(badgeCls?' '+badgeCls:'');
+  badge.textContent=badgeTxt;
+  const hv=document.getElementById(hvId);
+  if(hv) hv.className='drv'+(badgeCls?' '+badgeCls:' hi');
+}
+
+function setSVGStroke(id,color){
+  const e=document.getElementById(id); if(e) e.style.stroke=color;
+}
+
+// ── CHART UPDATE ──────────────────────────────────────────────────
+function updateChart(){
+  const t=el();
+  S.history.labels.push(t+'s');
+  S.history.pv.push(parseFloat(S.pv.toFixed(2)));
+  S.history.sp.push(S.sp);
+  if(S.history.labels.length>120){ S.history.labels.shift(); S.history.pv.shift(); S.history.sp.shift(); }
+  chart.data.labels=[...S.history.labels];
+  chart.data.datasets[0].data=[...S.history.pv];
+  chart.data.datasets[1].data=[...S.history.sp];
+  chart.update('none');
+}
+
+// ── FAULT INJECTION ───────────────────────────────────────────────
+function tog(k){
+  S.faults[k]=!S.faults[k];
+  if(!S.faults.tt201){ S.tt201.drift=0; S.tt201.status=0; }
+  if(!S.faults.ft202){ S.ft202.status=0; }
+  document.getElementById('btn-tt201').classList.toggle('on',S.faults.tt201);
+  document.getElementById('btn-ft202').classList.toggle('on',S.faults.ft202);
+  document.getElementById('btn-fcv203').classList.toggle('on',S.faults.fcv203);
+}
+
+function resetAll(){
+  ['tt201','ft202','fcv203'].forEach(k=>S.faults[k]=false);
+  S.tt201.drift=0; S.tt201.status=0;
+  S.ft202.status=0;
+  S.pid.integral=0; S.pid.prevErr=0;
+  ['tt201','ft202','fcv203'].forEach(k=>document.getElementById('btn-'+k).classList.remove('on'));
+}
+
+// ── SLIDER ────────────────────────────────────────────────────────
+document.getElementById('sp-sli').addEventListener('input',function(){
+  S.sp=parseFloat(this.value);
+  S.pid.integral=0; S.pid.prevErr=0;
+});
+
+// ── CLOCK ─────────────────────────────────────────────────────────
+setInterval(()=>{document.getElementById('clk').textContent=new Date().toTimeString().slice(0,8);},1000);
+document.getElementById('clk').textContent=new Date().toTimeString().slice(0,8);
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────
+setInterval(step, 500);
+</script>
+</body>
+</html>
